@@ -75,6 +75,50 @@ class TerminalConditions(BaseModel):
     target_score: float | None = None
 
 
+class BudgetSpec(BaseModel):
+    """Budget controls enforced at the queue boundary before claim().
+
+    Enforced before claim() -- not inside the worker -- so that N concurrent
+    workers cannot collectively exceed the ceiling. Queue-level enforcement is
+    the only correct location for distributed multiplier safety.
+
+    Fields:
+        max_tokens_per_iteration: Hard per-turn token ceiling. None = no limit.
+        max_tokens_total: Cumulative token ceiling across all iterations.
+            claim() returns budget_exhausted when exceeded. None = no limit.
+        max_cost_usd: Cumulative cost ceiling in USD. None = no limit.
+        kill_switch: Signal identifier the operator sets to halt all workers
+            on this loop. Scheduler polls before each dispatch. None = disabled.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    max_tokens_per_iteration: int | None = None
+    max_tokens_total: int | None = None
+    max_cost_usd: float | None = None
+    kill_switch: str | None = None
+
+    @field_validator("max_tokens_per_iteration", "max_tokens_total")
+    @classmethod
+    def _non_negative_int(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("max_cost_usd")
+    @classmethod
+    def _non_negative_float(cls, v: float | None) -> float | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("kill_switch")
+    @classmethod
+    def _non_empty_kill_switch(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("kill_switch must be a non-empty string when set")
+        return v
+
 # ---------------------------------------------------------------------------
 # Base spec — fields common to all loop kinds
 # ---------------------------------------------------------------------------
@@ -102,6 +146,13 @@ class LoopSpec(BaseModel):
     Distinct from the running deliberation log (e.g. STATE.md used by
     Cyclus workers). ``output_dir`` is where *finished* work accumulates;
     the deliberation log is where *in-progress* reasoning lives.
+    """
+    budget: BudgetSpec | None = None
+    """Budget controls enforced at the queue boundary before claim().
+
+    When set, the execution fabric checks cumulative spend before granting
+    each claim() -- preventing concurrent workers from collectively exceeding
+    the ceiling. None = no budget enforcement.
     """
     repo: str | None = None
     """Git URL of the repository the loop operates on.
@@ -275,6 +326,7 @@ def load_spec(path: str | Path) -> LoopSpec:
 
 
 __all__ = [
+    "BudgetSpec",
     "ExecutorSpec",
     "LoopSpec",
     "TerminalConditions",
