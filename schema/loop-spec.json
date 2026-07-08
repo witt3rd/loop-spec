@@ -34,6 +34,9 @@
     },
     "terminal": {
       "$ref": "#/definitions/TerminalConditions"
+    },
+    "executor": {
+      "$ref": "#/definitions/ExecutorSpec"
     }
   },
 
@@ -93,6 +96,56 @@
   ],
 
   "definitions": {
+    "ExecutorSpec": {
+      "type": "object",
+      "description": "Declares who — or what — takes the action on each turn. An executor receives the turn's context, acts, and returns a TurnResult. The contract is executor-agnostic: shell (deterministic), hermes (reasoning), http (over the wire), and human (judgment). The human type is the general case the others specialize; paired with `level` it encodes the handoff arc human → hermes/L1 → L2 → L3.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["human", "hermes", "shell", "http"],
+          "default": "shell",
+          "description": "Who acts on each turn. human requires `who`; hermes requires `profile`; shell requires `command`; http requires `url`."
+        },
+        "who": {
+          "type": "string",
+          "description": "human: identifier of the person taking the turn."
+        },
+        "profile": {
+          "type": "string",
+          "description": "hermes: agent profile name."
+        },
+        "command": {
+          "type": "string",
+          "description": "shell: executable + args, invoked with LOOP_* env vars."
+        },
+        "url": {
+          "type": "string",
+          "description": "http: endpoint that receives TurnContext JSON and returns TurnResult JSON."
+        }
+      }
+    },
+    "TurnResult": {
+      "type": "object",
+      "description": "The outcome of a single executor turn. Every executor — shell, hermes, http, or human — returns one. The outcome vocabulary is richer than pass/fail because non-compliance is the signal the loop learns from: an executor that could only report success would hide where the proposed action was wrong.",
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": ["applied", "modified", "rejected", "failed"],
+          "description": "applied=did it as-is; modified=did it differently (better local info); rejected=declined (highest-signal — proposal wrong or out-of-band knowledge); failed=attempted, did not complete."
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Free-text account. For modified and rejected this is the training signal — why the executor diverged from the proposal."
+        },
+        "metric_value": {
+          "type": ["number", "null"],
+          "default": null,
+          "description": "Measured metric after the turn, if the loop is metric-shaped. null for loops with no scalar metric."
+        }
+      }
+    },
     "TerminalConditions": {
       "type": "object",
       "description": "Conditions under which the loop terminates.",
