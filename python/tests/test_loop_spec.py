@@ -158,17 +158,23 @@ class TestExecutorSpec:
         p = write_spec(tmp_path, {
             "kind": "SelectionKind",
             "name": "t",
-            "executor": {"type": "human", "who": "donald"},
+            "executor": {"type": "human", "who": "alex"},
         })
         spec = load_spec(p)
         assert spec.executor is not None
         assert spec.executor.type == "human"
-        assert spec.executor.who == "donald"
+        assert spec.executor.who == "alex"
 
     def test_human_executor_standalone(self):
-        e = ExecutorSpec(type="human", who="donald")
+        e = ExecutorSpec(type="human", who="alex")
         assert e.type == "human"
-        assert e.who == "donald"
+        assert e.who == "alex"
+
+    def test_executor_missing_required_field_rejected(self):
+        # Each type requires its corresponding field; the fieldless shape is unreachable.
+        for kind in ("human", "hermes", "shell", "http"):
+            with pytest.raises(ValidationError):
+                ExecutorSpec.model_validate({"type": kind})
 
     def test_unknown_executor_type_rejected(self, tmp_path):
         p = write_spec(tmp_path, {

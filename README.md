@@ -104,7 +104,7 @@ executor-agnostic. Four executor types satisfy it:
 ```yaml
 executor:
   type: human
-  who: donald
+  who: alex
 ```
 
 The `human` type is not a degenerate case — it is the **general case the others

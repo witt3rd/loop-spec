@@ -74,6 +74,20 @@ class ExecutorSpec(BaseModel):
     command: str | None = None  # shell: executable + args
     url: str | None = None      # http: POST endpoint
 
+    _REQUIRED: ClassVar[dict[str, str]] = {
+        "human": "who",
+        "hermes": "profile",
+        "shell": "command",
+        "http": "url",
+    }
+
+    @model_validator(mode="after")
+    def _require_type_field(self) -> ExecutorSpec:
+        field = self._REQUIRED[self.type]
+        if getattr(self, field) is None:
+            raise ValueError(f"executor type {self.type!r} requires {field!r}")
+        return self
+
 
 class TurnResult(BaseModel):
     """The outcome of a single executor turn.
