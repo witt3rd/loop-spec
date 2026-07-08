@@ -73,11 +73,20 @@ class LoopSpec(BaseModel):
     name: str
     level: Literal["L1", "L2", "L3"] = "L1"
     terminal: TerminalConditions = Field(default_factory=TerminalConditions)
-    executor: ExecutorSpec = Field(
-        default_factory=lambda: ExecutorSpec(type="shell", command="echo no-executor")
-    )
-    memory: str = "./output"
-    """Output directory for findings, committed hypotheses, and completion reports."""
+    executor: ExecutorSpec | None = None
+    """How the agent executor is invoked each turn.
+
+    ``None`` means execution is handled externally by the consumer (e.g.
+    Cyclus manages its own dispatch via ``delegate_task`` or ``hermes cron``).
+    Execution fabrics like Saturate require an explicit executor declaration.
+    """
+    output_dir: str = "./output"
+    """Directory where the loop writes completed artifacts and findings.
+
+    Distinct from the running deliberation log (e.g. STATE.md used by
+    Cyclus workers). ``output_dir`` is where *finished* work accumulates;
+    the deliberation log is where *in-progress* reasoning lives.
+    """
 
 
 # ---------------------------------------------------------------------------
