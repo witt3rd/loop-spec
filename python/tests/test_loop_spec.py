@@ -108,10 +108,10 @@ class TestLoadSpec:
 
 
 class TestExecutorSpec:
-    def test_default_executor(self, tmp_path):
+    def test_default_executor_is_none(self, tmp_path):
         p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
         spec = load_spec(p)
-        assert spec.executor.type == "shell"
+        assert spec.executor is None
 
     def test_hermes_executor(self, tmp_path):
         p = write_spec(tmp_path, {
@@ -120,6 +120,7 @@ class TestExecutorSpec:
             "executor": {"type": "hermes", "profile": "forge"},
         })
         spec = load_spec(p)
+        assert spec.executor is not None
         assert spec.executor.type == "hermes"
         assert spec.executor.profile == "forge"
 
@@ -132,6 +133,7 @@ class TestExecutorSpec:
             "executor": {"type": "shell", "command": "./run.sh"},
         })
         spec = load_spec(p)
+        assert spec.executor is not None
         assert spec.executor.type == "shell"
         assert spec.executor.command == "./run.sh"
 
@@ -142,6 +144,7 @@ class TestExecutorSpec:
             "executor": {"type": "http", "url": "http://localhost:9000/turn"},
         })
         spec = load_spec(p)
+        assert spec.executor is not None
         assert spec.executor.type == "http"
         assert spec.executor.url == "http://localhost:9000/turn"
 
@@ -151,20 +154,30 @@ class TestExecutorSpec:
         assert e.profile == "my-agent"
 
 
-class TestMemory:
-    def test_memory_default(self, tmp_path):
+class TestOutputDir:
+    def test_output_dir_default(self, tmp_path):
         p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
         spec = load_spec(p)
-        assert spec.memory == "./output"
+        assert spec.output_dir == "./output"
 
-    def test_memory_custom(self, tmp_path):
+    def test_output_dir_custom(self, tmp_path):
         p = write_spec(tmp_path, {
             "kind": "TaskExecutionKind",
             "name": "t",
-            "memory": "./output/my-loop",
+            "output_dir": "./output/my-loop",
         })
         spec = load_spec(p)
-        assert spec.memory == "./output/my-loop"
+        assert spec.output_dir == "./output/my-loop"
+
+    def test_no_memory_field(self, tmp_path):
+        """memory was renamed to output_dir — old name must raise a clear error."""
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind",
+            "name": "t",
+            "memory": "./some/path",  # old field name
+        })
+        with pytest.raises((ValidationError, ValueError), match="memory.*renamed.*output_dir"):
+            load_spec(p)
 
 
 class TestMetricOptimizationExtensions:
