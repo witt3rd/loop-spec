@@ -14,10 +14,10 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +69,8 @@ class TerminalConditions(BaseModel):
 class LoopSpec(BaseModel):
     """Base class for all loop specs. Not instantiated directly."""
 
+    model_config = {"extra": "forbid"}
+
     kind: str
     name: str
     level: Literal["L1", "L2", "L3"] = "L1"
@@ -87,6 +89,16 @@ class LoopSpec(BaseModel):
     Cyclus workers). ``output_dir`` is where *finished* work accumulates;
     the deliberation log is where *in-progress* reasoning lives.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _check_renamed_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "memory" in data:
+            raise ValueError(
+                "The 'memory' field was renamed to 'output_dir' in loop-spec v0.2. "
+                "Please update your spec file."
+            )
+        return data
 
 
 # ---------------------------------------------------------------------------

@@ -170,15 +170,14 @@ class TestOutputDir:
         assert spec.output_dir == "./output/my-loop"
 
     def test_no_memory_field(self, tmp_path):
-        """memory was renamed to output_dir — old name should not be accepted."""
+        """memory was renamed to output_dir — old name must raise a clear error."""
         p = write_spec(tmp_path, {
             "kind": "TaskExecutionKind",
             "name": "t",
             "memory": "./some/path",  # old field name
         })
-        spec = load_spec(p)
-        # Pydantic ignores extra fields by default — output_dir stays default
-        assert spec.output_dir == "./output"
+        with pytest.raises((ValidationError, ValueError), match="memory.*renamed.*output_dir"):
+            load_spec(p)
 
 
 class TestMetricOptimizationExtensions:
