@@ -91,10 +91,33 @@ class BudgetSpec(BaseModel):
             on this loop. Scheduler polls before each dispatch. None = disabled.
     """
 
+    model_config = {"extra": "forbid"}
+
     max_tokens_per_iteration: int | None = None
     max_tokens_total: int | None = None
     max_cost_usd: float | None = None
     kill_switch: str | None = None
+
+    @field_validator("max_tokens_per_iteration", "max_tokens_total")
+    @classmethod
+    def _non_negative_int(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("max_cost_usd")
+    @classmethod
+    def _non_negative_float(cls, v: float | None) -> float | None:
+        if v is not None and v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    @field_validator("kill_switch")
+    @classmethod
+    def _non_empty_kill_switch(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("kill_switch must be a non-empty string when set")
+        return v
 
 # ---------------------------------------------------------------------------
 # Base spec — fields common to all loop kinds

@@ -336,6 +336,7 @@ class TestBudgetSpec:
             "budget": {"max_tokens_total": 500000},
         })
         spec = load_spec(p)
+        assert spec.budget is not None
         assert spec.budget.max_tokens_total == 500000
         assert spec.budget.max_tokens_per_iteration is None
         assert spec.budget.max_cost_usd is None
@@ -348,4 +349,44 @@ class TestBudgetSpec:
             "budget": {"max_cost_usd": 5.0},
         })
         spec = load_spec(p)
+        assert spec.budget is not None
         assert spec.budget.max_cost_usd == 5.0
+    def test_budget_rejects_unknown_fields(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "budget": {"max_tokens_totl": 999},  # typo — should be rejected
+        })
+        with pytest.raises(ValidationError):
+            load_spec(p)
+
+    def test_budget_rejects_negative_tokens(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "budget": {"max_tokens_total": -1},
+        })
+        with pytest.raises(ValidationError, match="non-negative"):
+            load_spec(p)
+
+    def test_budget_rejects_negative_cost(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "budget": {"max_cost_usd": -0.01},
+        })
+        with pytest.raises(ValidationError, match="non-negative"):
+            load_spec(p)
+
+    def test_budget_rejects_empty_kill_switch(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "budget": {"kill_switch": "   "},
+        })
+        with pytest.raises(ValidationError, match="non-empty"):
+            load_spec(p)
