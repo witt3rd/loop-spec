@@ -250,3 +250,59 @@ class TestTaskExecutionExtensions:
         })
         spec = load_spec(p)
         assert spec.plan_path == "./plans/phase1.md"
+
+
+class TestRepoField:
+    def test_repo_defaults_none(self, tmp_path):
+        p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
+        assert load_spec(p).repo is None
+
+    def test_repo_https_url(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "repo": "https://github.com/org/repo.git",
+        })
+        assert load_spec(p).repo == "https://github.com/org/repo.git"
+
+    def test_repo_ssh_scp_style(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "repo": "git@github.com:org/repo.git",
+        })
+        assert load_spec(p).repo == "git@github.com:org/repo.git"
+
+    def test_repo_file_url(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "repo": "file:///tmp/some-project",
+        })
+        assert load_spec(p).repo == "file:///tmp/some-project"
+
+    def test_repo_absolute_path_rejected(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "repo": "/home/dt/src/witt3rd/saturate",
+        })
+        with pytest.raises(ValidationError, match="git URL"):
+            load_spec(p)
+
+    def test_repo_bare_name_rejected(self, tmp_path):
+        import pytest
+        from pydantic import ValidationError
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "repo": "saturate",
+        })
+        with pytest.raises(ValidationError, match="git URL"):
+            load_spec(p)
+
+    def test_repo_on_metric_optimization(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind", "name": "t",
+            "metric": "coverage", "direction": "higher_is_better",
+            "repo": "https://github.com/org/repo.git",
+        })
+        spec = load_spec(p)
+        assert spec.repo == "https://github.com/org/repo.git"

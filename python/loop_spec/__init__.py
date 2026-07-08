@@ -13,11 +13,25 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# ---------------------------------------------------------------------------
+# Git URL validation
+# ---------------------------------------------------------------------------
+
+_GIT_URL_RE = re.compile(
+    r"^(https?|git|ssh|file)://"  # scheme-based URLs
+    r"|^git@"                      # SCP-style SSH (git@github.com:org/repo.git)
+)
+
+
+def _is_git_url(value: str) -> bool:
+    return bool(_GIT_URL_RE.match(value))
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +55,7 @@ class ExecutorSpec(BaseModel):
     type: Literal["hermes", "shell", "http"] = "shell"
     profile: str | None = None  # hermes: agent profile name
     command: str | None = None  # shell: executable + args
-    url: str | None = None  # http: POST endpoint
+    url: str | None = None      # http: POST endpoint
 
 
 # ---------------------------------------------------------------------------
@@ -90,17 +104,31 @@ class LoopSpec(BaseModel):
     the deliberation log is where *in-progress* reasoning lives.
     """
     repo: str | None = None
-    """Absolute path to the git repository the loop operates on.
+    """Git URL of the repository the loop operates on.
 
-    When set, the execution fabric (e.g. Saturate) uses this directory as
-    the working tree for hypothesis commits and reverts.  All git operations
-    are strictly scoped to this path — the fabric's own source tree is never
-    touched.
+    Must be a valid git URL: https://, git://, git@, ssh://, or file://.
 
-    ``None`` means the loop produces no git-backed hypothesis commits.
-    Loops that commit/revert hypotheses (MetricOptimizationKind,
-    TaskExecutionKind) require this field to be set.
+    The execution fabric (e.g. Saturate) clones this URL into an isolated
+    worktree, scopes all hypothesis commits and reverts to that worktree,
+    and never touches the fabric's own source tree.
+
+    Credentials are a deployment concern — the fabric runs in an environment
+    with pre-configured access (SSH key, GITHUB_TOKEN, etc.), exactly as a
+    CI runner would.
+
+    ``None`` means the loop produces no git-backed hypothesis commits (e.g.
+    Cyclus delegate_task loops, L1 report-only loops).
     """
+
+    @field_validator("repo")
+    @classmethod
+    def _validate_repo_url(cls, v: str | None) -> str | None:
+        if v is not None and not _is_git_url(v):
+            raise ValueError(
+                f"repo must be a git URL (https://, git://, git@, ssh://, file://), "
+                f"got {v!r}"
+            )
+        return v
 
     @model_validator(mode="before")
     @classmethod
