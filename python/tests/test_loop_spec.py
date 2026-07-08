@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from loop_spec import (
     ClarificationSpec,
+    ExecutorSpec,
+    InformationSeekingSpec,
     MetricOptimizationSpec,
     SelectionSpec,
     TaskExecutionSpec,
@@ -103,3 +105,135 @@ class TestLoadSpec:
             p.write_text(yaml.dump({"kind": kind, "name": "t", **extra}), encoding="utf-8")
             spec = load_spec(p)
             assert spec.kind == kind
+
+
+class TestExecutorSpec:
+    def test_default_executor(self, tmp_path):
+        p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
+        spec = load_spec(p)
+        assert spec.executor.type == "shell"
+
+    def test_hermes_executor(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind",
+            "name": "t",
+            "executor": {"type": "hermes", "profile": "forge"},
+        })
+        spec = load_spec(p)
+        assert spec.executor.type == "hermes"
+        assert spec.executor.profile == "forge"
+
+    def test_shell_executor(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "s",
+            "direction": "lower_is_better",
+            "executor": {"type": "shell", "command": "./run.sh"},
+        })
+        spec = load_spec(p)
+        assert spec.executor.type == "shell"
+        assert spec.executor.command == "./run.sh"
+
+    def test_http_executor(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "ConsensusKind",
+            "name": "t",
+            "executor": {"type": "http", "url": "http://localhost:9000/turn"},
+        })
+        spec = load_spec(p)
+        assert spec.executor.type == "http"
+        assert spec.executor.url == "http://localhost:9000/turn"
+
+    def test_executor_spec_standalone(self):
+        e = ExecutorSpec(type="hermes", profile="my-agent")
+        assert e.type == "hermes"
+        assert e.profile == "my-agent"
+
+
+class TestMemory:
+    def test_memory_default(self, tmp_path):
+        p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
+        spec = load_spec(p)
+        assert spec.memory == "./output"
+
+    def test_memory_custom(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind",
+            "name": "t",
+            "memory": "./output/my-loop",
+        })
+        spec = load_spec(p)
+        assert spec.memory == "./output/my-loop"
+
+
+class TestMetricOptimizationExtensions:
+    def test_evaluate_extract_default(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "build_time",
+            "direction": "lower_is_better",
+        })
+        spec = load_spec(p)
+        assert isinstance(spec, MetricOptimizationSpec)
+        assert spec.evaluate_extract == "wall_clock"
+
+    def test_evaluate_extract_regex(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "score",
+            "direction": "higher_is_better",
+            "evaluate_extract": r"regex:(\d+\.\d+)",
+        })
+        spec = load_spec(p)
+        assert spec.evaluate_extract == r"regex:(\d+\.\d+)"
+
+    def test_correctness_default_none(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "s",
+            "direction": "lower_is_better",
+        })
+        spec = load_spec(p)
+        assert spec.correctness is None
+
+    def test_correctness_set(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "build_time",
+            "direction": "lower_is_better",
+            "correctness": "npm test",
+        })
+        spec = load_spec(p)
+        assert spec.correctness == "npm test"
+
+    def test_direction_lower_is_better(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind",
+            "name": "t",
+            "metric": "latency",
+            "direction": "lower_is_better",
+        })
+        spec = load_spec(p)
+        assert spec.direction == "lower_is_better"
+
+
+class TestTaskExecutionExtensions:
+    def test_plan_path_default_none(self, tmp_path):
+        p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
+        spec = load_spec(p)
+        assert isinstance(spec, TaskExecutionSpec)
+        assert spec.plan_path is None
+
+    def test_plan_path_set(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind",
+            "name": "t",
+            "plan_path": "./plans/phase1.md",
+        })
+        spec = load_spec(p)
+        assert spec.plan_path == "./plans/phase1.md"
