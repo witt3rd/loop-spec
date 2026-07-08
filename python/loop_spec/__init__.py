@@ -89,6 +89,18 @@ class LoopSpec(BaseModel):
     Cyclus workers). ``output_dir`` is where *finished* work accumulates;
     the deliberation log is where *in-progress* reasoning lives.
     """
+    repo: str | None = None
+    """Absolute path to the git repository the loop operates on.
+
+    When set, the execution fabric (e.g. Saturate) uses this directory as
+    the working tree for hypothesis commits and reverts.  All git operations
+    are strictly scoped to this path — the fabric's own source tree is never
+    touched.
+
+    ``None`` means the loop produces no git-backed hypothesis commits.
+    Loops that commit/revert hypotheses (MetricOptimizationKind,
+    TaskExecutionKind) require this field to be set.
+    """
 
     @model_validator(mode="before")
     @classmethod
