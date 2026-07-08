@@ -306,3 +306,46 @@ class TestRepoField:
         })
         spec = load_spec(p)
         assert spec.repo == "https://github.com/org/repo.git"
+
+class TestBudgetSpec:
+    def test_budget_defaults_none(self, tmp_path):
+        p = write_spec(tmp_path, {"kind": "TaskExecutionKind", "name": "t"})
+        assert load_spec(p).budget is None
+
+    def test_budget_all_fields(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind", "name": "t",
+            "budget": {
+                "max_tokens_per_iteration": 50000,
+                "max_tokens_total": 2000000,
+                "max_cost_usd": 10.0,
+                "kill_switch": "loop-pause-all",
+            },
+        })
+        spec = load_spec(p)
+        assert spec.budget is not None
+        assert spec.budget.max_tokens_per_iteration == 50000
+        assert spec.budget.max_tokens_total == 2000000
+        assert spec.budget.max_cost_usd == 10.0
+        assert spec.budget.kill_switch == "loop-pause-all"
+
+    def test_budget_partial_fields(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind", "name": "t",
+            "metric": "coverage", "direction": "higher_is_better",
+            "budget": {"max_tokens_total": 500000},
+        })
+        spec = load_spec(p)
+        assert spec.budget.max_tokens_total == 500000
+        assert spec.budget.max_tokens_per_iteration is None
+        assert spec.budget.max_cost_usd is None
+        assert spec.budget.kill_switch is None
+
+    def test_budget_on_metric_optimization(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "MetricOptimizationKind", "name": "t",
+            "metric": "score", "direction": "higher_is_better",
+            "budget": {"max_cost_usd": 5.0},
+        })
+        spec = load_spec(p)
+        assert spec.budget.max_cost_usd == 5.0
