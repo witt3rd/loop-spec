@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/witt3rd/loop-spec/schema/loop-spec.json",
+  "title": "LoopSpec",
+  "description": "Specification for a loop-shaped agentic work item.",
+  "version": "0.1.0",
+
+  "type": "object",
+  "required": ["kind", "name"],
+
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "MetricOptimizationKind",
+        "TaskExecutionKind",
+        "ConsensusKind",
+        "InformationSeekingKind",
+        "ClarificationKind",
+        "SelectionKind"
+      ],
+      "description": "The loop kind. Determines required fields and terminal semantics."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+$",
+      "description": "Slug identifier for this loop instance. Filesystem-safe."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["L1", "L2", "L3"],
+      "default": "L1",
+      "description": "Maturity level: L1=propose-only, L2=apply-with-confirmation, L3=autonomous."
+    },
+    "terminal": {
+      "$ref": "#/definitions/TerminalConditions"
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "MetricOptimizationKind" } } },
+      "then": {
+        "required": ["metric", "direction"],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "description": "JSON field name to extract from evaluate command output."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["higher_is_better", "lower_is_better"]
+          },
+          "baseline": {
+            "type": ["number", "null"],
+            "description": "Current measured value. Must be set before dispatch."
+          },
+          "evaluate": {
+            "type": "string",
+            "description": "Shell command that outputs JSON containing the metric field. Must be read-only."
+          },
+          "target_files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Files the loop worker may modify (L2+). Empty at L1."
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "TaskExecutionKind" } } },
+      "then": {
+        "properties": {
+          "target_files": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "ClarificationKind" } } },
+      "then": {
+        "properties": {
+          "human_gated": {
+            "type": "boolean",
+            "const": true,
+            "description": "ClarificationKind loops always require human confirmation to terminate."
+          }
+        }
+      }
+    }
+  ],
+
+  "definitions": {
+    "TerminalConditions": {
+      "type": "object",
+      "description": "Conditions under which the loop terminates.",
+      "properties": {
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Hard cap on iterations. Required — no open-ended loops."
+        },
+        "plateau_count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Stop after N consecutive iterations with no measurable improvement."
+        },
+        "target_score": {
+          "type": ["number", "null"],
+          "default": null,
+          "description": "Optional: stop when metric exceeds (or falls below) this value."
+        }
+      }
+    }
+  }
+}
