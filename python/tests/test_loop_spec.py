@@ -13,6 +13,7 @@ from loop_spec import (
     MetricOptimizationSpec,
     SelectionSpec,
     TaskExecutionSpec,
+    TurnResult,
     load_spec,
 )
 
@@ -152,6 +153,71 @@ class TestExecutorSpec:
         e = ExecutorSpec(type="hermes", profile="my-agent")
         assert e.type == "hermes"
         assert e.profile == "my-agent"
+
+    def test_human_executor(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "SelectionKind",
+            "name": "t",
+            "executor": {"type": "human", "who": "alex"},
+        })
+        spec = load_spec(p)
+        assert spec.executor is not None
+        assert spec.executor.type == "human"
+        assert spec.executor.who == "alex"
+
+    def test_human_executor_standalone(self):
+        e = ExecutorSpec(type="human", who="alex")
+        assert e.type == "human"
+        assert e.who == "alex"
+
+    def test_executor_missing_required_field_rejected(self):
+        # Each type requires its corresponding field; the fieldless shape is unreachable.
+        for kind in ("human", "hermes", "shell", "http"):
+            with pytest.raises(ValidationError):
+                ExecutorSpec.model_validate({"type": kind})
+
+    def test_unknown_executor_type_rejected(self, tmp_path):
+        p = write_spec(tmp_path, {
+            "kind": "TaskExecutionKind",
+            "name": "t",
+            "executor": {"type": "robot"},
+        })
+        with pytest.raises(ValidationError):
+            load_spec(p)
+
+
+class TestTurnResult:
+    def test_applied(self):
+        r = TurnResult(outcome="applied")
+        assert r.outcome == "applied"
+        assert r.notes is None
+        assert r.metric_value is None
+
+    def test_modified_carries_notes(self):
+        r = TurnResult(outcome="modified", notes="did it differently — better local info")
+        assert r.outcome == "modified"
+        assert r.notes is not None and "differently" in r.notes
+
+    def test_rejected_carries_notes(self):
+        r = TurnResult(outcome="rejected", notes="proposal would optimize the metric at cost of well-being")
+        assert r.outcome == "rejected"
+        assert r.notes is not None
+
+    def test_failed(self):
+        r = TurnResult(outcome="failed", notes="attempted, ran out of time")
+        assert r.outcome == "failed"
+
+    def test_metric_value_optional(self):
+        r = TurnResult(outcome="applied", metric_value=1.42)
+        assert r.metric_value == 1.42
+
+    def test_unknown_outcome_rejected(self):
+        with pytest.raises(ValidationError):
+            TurnResult.model_validate({"outcome": "deferred"})
+
+    def test_outcome_is_required(self):
+        with pytest.raises(ValidationError):
+            TurnResult.model_validate({})
 
 
 class TestOutputDir:

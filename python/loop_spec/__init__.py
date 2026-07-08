@@ -40,22 +40,85 @@ def _is_git_url(value: str) -> bool:
 
 
 class ExecutorSpec(BaseModel):
-    """Declares how the agent executor is invoked for each turn.
+    """Declares who — or what — takes the action on each turn.
 
-    Executors are external processes — they do not import the loop-spec SDK.
-    The execution fabric (e.g. Saturate) launches them, monitors them, and
-    recovers from crashes.
+    An executor receives the turn's context, takes an action in the world, and
+    returns a ``TurnResult``. That contract is executor-agnostic: a shell script
+    satisfies it deterministically, a Hermes agent satisfies it with reasoning,
+    an HTTP service satisfies it over the wire — and a human satisfies it with
+    judgment. The ``human`` type is not a degenerate case; it is the general
+    case the others specialize.
+
+    The ``human`` type is also what lets a loop's action be handed off over
+    time: a loop can begin ``human`` (a person does the turns), graduate to
+    ``hermes`` at ``level: L1`` (agent proposes, human reviews every turn), then
+    L2, then L3 (autonomous). The executor type names *who acts*; ``level`` names
+    *how much they are trusted*. Together they encode the full handoff arc.
 
     Types:
+        human   — a person takes the turn (requires ``who``)
         hermes  — Hermes agent profile (requires ``profile``)
         shell   — arbitrary executable with LOOP_* env vars (requires ``command``)
         http    — POST TurnContext JSON, receive TurnResult JSON (requires ``url``)
+
+    Machine executors (hermes, shell, http) are external processes — they do
+    not import the loop-spec SDK. The execution fabric (e.g. Saturate) launches
+    them, monitors them, and recovers from crashes. A ``human`` executor is not
+    launched by the fabric; the fabric surfaces the turn's context and waits for
+    the human to record a ``TurnResult``.
     """
 
-    type: Literal["hermes", "shell", "http"] = "shell"
+    type: Literal["human", "hermes", "shell", "http"] = "shell"
+    who: str | None = None      # human: identifier of the person taking the turn
     profile: str | None = None  # hermes: agent profile name
     command: str | None = None  # shell: executable + args
     url: str | None = None      # http: POST endpoint
+
+    _REQUIRED: ClassVar[dict[str, str]] = {
+        "human": "who",
+        "hermes": "profile",
+        "shell": "command",
+        "http": "url",
+    }
+
+    @model_validator(mode="after")
+    def _require_type_field(self) -> ExecutorSpec:
+        field = self._REQUIRED[self.type]
+        if getattr(self, field) is None:
+            raise ValueError(f"executor type {self.type!r} requires {field!r}")
+        return self
+
+
+class TurnResult(BaseModel):
+    """The outcome of a single executor turn.
+
+    Every executor — shell, hermes, http, or human — returns a ``TurnResult``
+    describing what actually happened when it acted on the turn's context. The
+    outcome vocabulary is deliberately richer than pass/fail: an executor that
+    could only ever report success would hide exactly the signal the loop needs
+    in order to learn — where the proposed action was wrong. Non-compliance is
+    a first-class, expected result, not an error.
+
+    Outcomes:
+        applied   — executed the proposed action as-is
+        modified  — executed a changed version of the proposal (the estimate was
+                    close, but the executor had better local information)
+        rejected  — declined to act. The highest-signal outcome: the proposal
+                    was made and refused, which means either the proposal was
+                    wrong or the executor holds out-of-band knowledge the loop
+                    does not have. Either way it is training data.
+        failed    — attempted the action and did not complete it
+    """
+
+    outcome: Literal["applied", "modified", "rejected", "failed"]
+    notes: str | None = None
+    """Free-text account of the turn. For ``modified`` and ``rejected`` this is
+    the training signal — *why* the executor diverged from the proposed action.
+    """
+    metric_value: float | None = None
+    """Measured metric after the turn, if the loop is metric-shaped. ``None``
+    for loops with no scalar metric.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +391,7 @@ def load_spec(path: str | Path) -> LoopSpec:
 __all__ = [
     "BudgetSpec",
     "ExecutorSpec",
+    "TurnResult",
     "LoopSpec",
     "TerminalConditions",
     "MetricOptimizationSpec",

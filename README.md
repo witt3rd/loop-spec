@@ -88,6 +88,63 @@ Full JSON Schema: [`schema/loop-spec.json`](schema/loop-spec.json)
 
 ---
 
+## Executors — who takes the turn
+
+Every loop iteration is a **turn**: something receives the turn's context, takes
+an action in the world, and returns a **`TurnResult`**. That contract is
+executor-agnostic. Four executor types satisfy it:
+
+| Type | Who acts | Required field |
+|------|----------|----------------|
+| `human` | a person | `who` |
+| `hermes` | a Hermes agent | `profile` |
+| `shell` | an executable | `command` |
+| `http` | a service | `url` |
+
+```yaml
+executor:
+  type: human
+  who: alex
+```
+
+The `human` type is not a degenerate case — it is the **general case the others
+specialize.** A shell script satisfies the turn contract deterministically, an
+agent satisfies it with reasoning, a person satisfies it with judgment. Same
+contract.
+
+`executor` together with `level` encodes the full **handoff arc.** The executor
+type names *who acts*; `level` names *how much they are trusted*:
+
+```
+human  →  hermes / L1  →  hermes / L2  →  hermes / L3
+(person   (agent          (agent          (agent
+ acts)     proposes,       acts, human     autonomous)
+           human reviews   confirms)
+           every turn)
+```
+
+A loop can begin fully human-executed and graduate its action to an agent as
+trust is earned — without changing what the loop *is*.
+
+### TurnResult — the outcome vocabulary
+
+A turn returns one of four outcomes. The vocabulary is deliberately richer than
+pass/fail, because **non-compliance is the signal the loop learns from** — an
+executor that could only ever report success would hide exactly where the
+proposed action was wrong:
+
+| Outcome | Meaning |
+|---------|---------|
+| `applied` | executed the proposed action as-is |
+| `modified` | executed a changed version (better local information) |
+| `rejected` | declined to act — the highest-signal outcome: the proposal was wrong, or the executor holds out-of-band knowledge the loop lacks |
+| `failed` | attempted and did not complete |
+
+For `modified` and `rejected`, `notes` carries the *why* — the training signal
+that refines what the loop proposes next.
+
+---
+
 ## Implementations
 
 | Language | Package | Status |
